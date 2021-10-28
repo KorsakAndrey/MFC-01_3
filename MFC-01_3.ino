@@ -31,7 +31,6 @@ bool is_on = false; //Device Status
 float voltage; //Onboard voltage
 
 
-
 //Flags
 bool sendFlag = false; //For send programms
 bool transmitFlag = false;
