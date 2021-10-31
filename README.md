@@ -7,3 +7,4 @@ Haves 3 buttons and 2 work's mode(programm change and command change). In first 
 ![Mesage log ](/.img/1.jpg)
 ![Mesage log ](/.img/2.jpg)
 ![Mesage log ](/.img/3.jpg)
+### Circuit:
