@@ -51,18 +51,23 @@ byte sw1_command;
 byte sw2_command;
 byte mute_command;
 byte auto_send;
+byte switch_mode;
+byte p1_programm;
+byte p2_programm;
 
 //Settings
 byte settings_names[][4] = {
   {0, _C, _h, 0}, {0, _B, _r, 0},
   {_E, _n, _d, 0}, {0, _S, _1, 0},
   {0, _S, _2, 0}, {0x33, 0x27, _u, _t},
-  {_A, _u, _t, _o}
+  {_A, _u, _t, _o}, {0x33, 0x27, _o, _d},
+  {0, _P, _1, 0},{0, _P, _2, 0}
 };
 byte* settings[] = {&channel, &bright, &max_preset, &sw1_command,
-                    &sw2_command, &mute_command, &auto_send
+                    &sw2_command, &mute_command, &auto_send,
+                    &switch_mode, &p1_programm, &p2_programm
                    };
-byte max_val[] = {16, 7, 127, 127, 127, 127, 1};
+byte max_val[] = {16, 7, 127, 127, 127, 127, 1, 1, 127, 127};
 byte item = 0;
 
 
@@ -92,6 +97,9 @@ void setup() {
   EEPROM.get(5, sw2_command);
   EEPROM.get(6, mute_command);
   EEPROM.get(7, auto_send);
+  EEPROM.get(8, switch_mode);
+  EEPROM.get(9, p1_programm);
+  EEPROM.get(10, p2_programm);
 
   //Configuration protocoll and display
   MIDI.begin(channel); //MIDI
@@ -176,15 +184,25 @@ void button_event() {
     static byte sw1 = 0;
     static byte sw2 = 0;
 
-    if (Up.isClick()) {
-      sw2 == OFF ? sw2 = ON : sw2 = OFF;
-      MIDI.sendControlChange(sw2_command, sw2, channel);
-      sw2_Flag = (sw2 == OFF) ? false : true;
+    if(not switch_mode){
+      if (Up.isClick()) {
+        sw2 == OFF ? sw2 = ON : sw2 = OFF;
+        MIDI.sendControlChange(sw2_command, sw2, channel);
+        sw2_Flag = (sw2 == OFF) ? false : true;
+      }
+      if (Down.isClick()) {
+        sw1 == OFF ? sw1 = ON : sw1 = OFF;
+        MIDI.sendControlChange(sw1_command, sw1, channel);
+        sw1_Flag = (sw1 == OFF) ? false : true;
+      }
     }
-    if (Down.isClick()) {
-      sw1 == OFF ? sw1 = ON : sw1 = OFF;
-      MIDI.sendControlChange(sw1_command, sw1, channel);
-      sw1_Flag = (sw1 == OFF) ? false : true;
+    else {
+      if (Down.isClick()) {
+        MIDI.sendProgramChange(p1_programm-1, channel);
+      }
+      if (Up.isClick()) {
+        MIDI.sendProgramChange(p2_programm-1, channel);
+      }
     }
     if (Set.isDouble()) {
       MODE = 1;
@@ -281,19 +299,24 @@ void display_send() {
         else {
           seg_display.point(0, false);
         }
-        if (sw1_Flag) {
-          to_display[0] = 0x5c;
+        if(not switch_mode) {
+          if (sw1_Flag) {
+            to_display[0] = 0x5c;
+          }
+          else {
+            to_display[0] = 0x08;
+          }
+          if (sw2_Flag) {
+            to_display[3] = 0x5c;
+          }
+          else {
+            to_display[3] = 0x08;
+          }
+          seg_display.displayByte(to_display);
         }
         else {
-          to_display[0] = 0x08;
+          seg_display.displayByte(0, _P, _C, 0);
         }
-        if (sw2_Flag) {
-          to_display[3] = 0x5c;
-        }
-        else {
-          to_display[3] = 0x08;
-        }
-        seg_display.displayByte(to_display);
         break;
       }
 
@@ -316,6 +339,11 @@ void display_send() {
               seg_display.displayByte(0, 0, _O, _n) :
               seg_display.displayByte(0, _O, _f, _f);
               }
+            else if(item == 7){
+              (*settings[item]) ?
+              seg_display.displayByte(0, 0, _C, _C) :
+              seg_display.displayByte(0, 0, _C, _P);
+              }  
             else {  
               seg_display.displayInt(*settings[item]);
             }
