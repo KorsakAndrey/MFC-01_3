@@ -29,7 +29,6 @@ byte MODE = 1; //Global work mode
 byte PRESET = 0; //Preset number
 bool is_on = false; //Device Status
 float voltage; //Onboard voltage
-byte to_display[4] = {0};
 
 //Flags
 bool sendFlag = false; //For send programms
@@ -164,10 +163,6 @@ void button_event() {
     }
     if (Set.isDouble() && not muteFlag) {
       MODE = 2;
-      to_display[0] = 0;
-      to_display[1] = _P;
-      to_display[2] = _C;
-      to_display[3] = 0;
     }
     if (Set.isTriple() && not muteFlag) {
       MODE = 3;
@@ -203,17 +198,11 @@ void button_event() {
     else {
       if (Down.isClick()) {
         MIDI.sendProgramChange(p1_programm-1, channel);
-        to_display[0] = 0;
-        to_display[1] = _P;
-        to_display[2] = _1;
-        to_display[3] = 0;
+        PRESET = p1_programm-1;
       }
       if (Up.isClick()) {
         MIDI.sendProgramChange(p2_programm-1, channel);
-        to_display[0] = 0;
-        to_display[1] = _P;
-        to_display[2] = _2;
-        to_display[3] = 0;
+        PRESET = p2_programm-1;
       }
     }
     if (Set.isDouble()) {
@@ -304,6 +293,7 @@ void display_send() {
       }
 
     case 2: {
+        static byte to_display[4] = {0};
         if (not batFlag) {
           seg_display.point(0, true);
         }
@@ -323,8 +313,20 @@ void display_send() {
           else {
             to_display[3] = 0x08;
           } 
+          seg_display.displayByte(to_display); 
         }
-        seg_display.displayByte(to_display); 
+        else {
+          if(p1_programm == PRESET+1) {
+            seg_display.displayByte(0, _P, _1, 0);
+          }
+          else if(p2_programm == PRESET+1) {
+            seg_display.displayByte(0, _P, _2, 0);
+          }
+          else {
+            seg_display.displayByte(0, _P, _C, 0);
+          } 
+           
+        }
         break;
       }
 
@@ -349,8 +351,8 @@ void display_send() {
               }
             else if(item == 7){
               (*settings[item]) ?
-              seg_display.displayByte(0, 0, _C, _C) :
-              seg_display.displayByte(0, 0, _C, _P);
+              seg_display.displayByte(0, 0, _P, _C) :
+              seg_display.displayByte(0, 0, _C, _C);
               }  
             else {  
               seg_display.displayInt(*settings[item]);
