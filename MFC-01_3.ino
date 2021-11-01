@@ -199,10 +199,12 @@ void button_event() {
       if (Down.isClick()) {
         MIDI.sendProgramChange(p1_programm-1, channel);
         PRESET = p1_programm-1;
+        sendFlag = false;
       }
       if (Up.isClick()) {
         MIDI.sendProgramChange(p2_programm-1, channel);
         PRESET = p2_programm-1;
+        sendFlag = false;
       }
     }
     if (Set.isDouble()) {
@@ -294,6 +296,7 @@ void display_send() {
 
     case 2: {
         static byte to_display[4] = {0};
+        seg_display.brightness(bright);
         if (not batFlag) {
           seg_display.point(0, true);
         }
