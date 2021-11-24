@@ -394,7 +394,6 @@ bool timer_flag(bool &flag, const int &t_delay) {
 
 void setting(byte** setting, byte* max_val) {
   if (Set.isSingle()) {
-    EEPROM.put(item + 1, *settings[item]);
     editFlag = false;
   }
   if (Up.isClick()) {
@@ -404,7 +403,10 @@ void setting(byte** setting, byte* max_val) {
   if (Down.isClick()) {
     *setting[item] == 0 ? *settings[item] = max_val[item] :
                                             *setting[item] = *setting[item] - 1;
-  }  
+  }
+
+
+  EEPROM.put(item + 1, *settings[item]);
 }
 
 
