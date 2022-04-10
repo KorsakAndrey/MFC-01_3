@@ -1,3 +1,5 @@
+//#pragma GCC optimize ("-O")
+
 #define UP_PIN 6
 #define DOWN_PIN 5
 #define SET_PIN 4
@@ -6,8 +8,8 @@
 #define IS_ON 7
 #define VREF 1.1
 /*((DIV_R1 + DIV_R2) / DIV_R2) = 4.6
-DIV_R1 9750  betwen "+" and POWER_SENS
-DIV_R2 2700  betwen "-" and POWER_SENS
+  DIV_R1 9750  betwen "+" and POWER_SENS
+  DIV_R2 2700  betwen "-" and POWER_SENS
 */
 #define POWER_COEFF 4.6
 #define POWER_SENS A3
@@ -27,8 +29,9 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 //Global var
 byte MODE = 1; //Global work mode
 byte PRESET = 0; //Preset number
-bool is_on = false; //Device Status
+bool is_on = true; //Device Status
 float voltage; //Onboard voltage
+byte wievCounter = 255;
 
 //Flags
 bool sendFlag = false; //For send programms
@@ -40,6 +43,7 @@ bool editFlag = false;
 bool voltFlag = false;
 bool batFlag = true;
 bool shutFlag = false;
+bool refreshFlag = true;
 
 
 //Static vallue in memory
@@ -60,7 +64,7 @@ byte settings_names[][4] = {
   {_E, _n, _d, 0}, {0, _S, _1, 0},
   {0, _S, _2, 0}, {0x33, 0x27, _u, _t},
   {_A, _u, _t, _o}, {0x33, 0x27, _o, _d},
-  {0, _P, _1, 0},{0, _P, _2, 0}
+  {0, _P, _1, 0}, {0, _P, _2, 0}
 };
 byte* settings[] = {&channel, &bright, &max_preset, &sw1_command,
                     &sw2_command, &mute_command, &auto_send,
@@ -105,6 +109,7 @@ void setup() {
   Serial.begin(31250); //Serial 9600 ,MIDI 31250
   seg_display.clear();
   seg_display.brightness(bright);
+  
 
 
   //Buttons config
@@ -117,6 +122,8 @@ void setup() {
   Set.setDebounce(50);
   Set.setTimeout(1500);
   Set.setClickTimeout(300);
+
+  seg_display.intro(60);
 }
 
 
@@ -134,10 +141,13 @@ void loop() {
   Set.tick();
 
   button_event();
-  if(not voltFlag){
+  if (not voltFlag) {
     save_bat();
-    } 
+  }
+
   display_send();
+
+
 }
 
 
@@ -147,19 +157,23 @@ void button_event() {
     if ((Up.isClick() || Up.isStep()) && not muteFlag) {
       (PRESET < max_preset - 1) ? PRESET++ : PRESET = 0;
       sendFlag = true;
+      refreshFlag = true;
     }
     if ((Down.isClick() || Down.isStep()) && not muteFlag) {
       (PRESET > 0) ? PRESET-- : PRESET = max_preset - 1;
       sendFlag = true;
+      refreshFlag = true;
     }
-    if(sendFlag && auto_send) {
+    if (sendFlag && auto_send) {
       MIDI.sendProgramChange(PRESET, channel);
       sendFlag = false;
-      }
+      refreshFlag = true;
+    }
     if (Set.isSingle() && sendFlag) {
       MIDI.sendProgramChange(PRESET, channel);
       sendFlag = false;
       transmitFlag = true;
+      refreshFlag = true;
     }
     if (Set.isDouble() && not muteFlag) {
       MODE = 2;
@@ -167,6 +181,7 @@ void button_event() {
     if (Set.isTriple() && not muteFlag) {
       MODE = 3;
       voltFlag = true;
+      refreshFlag = true;
     }
     if (Set.isHolded()) {
       muteFlag ? muteFlag = false : muteFlag = true;
@@ -176,6 +191,7 @@ void button_event() {
       else {
         MIDI.sendControlChange(mute_command, OFF, channel);
       }
+      refreshFlag = true;
     }
   }
   //Send control command
@@ -183,52 +199,59 @@ void button_event() {
     static byte sw1 = 0;
     static byte sw2 = 0;
 
-    if(not switch_mode){
+    if (not switch_mode) {
       if (Up.isClick()) {
         sw2 == OFF ? sw2 = ON : sw2 = OFF;
         MIDI.sendControlChange(sw2_command, sw2, channel);
         sw2_Flag = (sw2 == OFF) ? false : true;
+        refreshFlag = true;
       }
       if (Down.isClick()) {
         sw1 == OFF ? sw1 = ON : sw1 = OFF;
         MIDI.sendControlChange(sw1_command, sw1, channel);
         sw1_Flag = (sw1 == OFF) ? false : true;
+        refreshFlag = true;
       }
     }
     else {
       if (Down.isClick()) {
-        MIDI.sendProgramChange(p1_programm-1, channel);
-        PRESET = p1_programm-1;
+        MIDI.sendProgramChange(p1_programm - 1, channel);
+        PRESET = p1_programm - 1;
         sendFlag = false;
+        refreshFlag = true;
       }
       if (Up.isClick()) {
-        MIDI.sendProgramChange(p2_programm-1, channel);
-        PRESET = p2_programm-1;
+        MIDI.sendProgramChange(p2_programm - 1, channel);
+        PRESET = p2_programm - 1;
         sendFlag = false;
+        refreshFlag = true;
       }
     }
     if (Set.isDouble()) {
       MODE = 1;
       Set.resetStates();
+      refreshFlag = true;
     }
   }
   //Shutdown
   if (MODE == 3 && voltFlag) {
-    if(shutFlag) {
+    if (shutFlag) {
       timer_flag(is_on, 1000);
-      }
-    if(is_on){
-        digitalWrite(IS_ON, is_on);
-        }
-    if(Up.isClick() && Down.isClick()){
-      shutFlag = true;      
-      }
     }
+    if (!is_on) {
+      digitalWrite(IS_ON, is_on);
+    }
+    if (Up.isClick() && Down.isClick()) {
+      shutFlag = true;
+      refreshFlag = true;
+    }
+  }
   //Settings
   else if (MODE == 3 && not voltFlag) {
     if (Set.isTriple()) {
       MODE = 1;
       editFlag = false;
+      refreshFlag = true;
       item = 0;
       Set.resetStates();
       return;
@@ -236,12 +259,15 @@ void button_event() {
     if (not editFlag) {
       if (Set.isSingle()) {
         editFlag = true;
+        refreshFlag = true;
       }
       if (Up.isClick()) {
         item == sizeof(max_val) - 1 ? item = 0 : item++;
+        refreshFlag = true;
       }
       if (Down.isClick()) {
         item == 0 ? item = sizeof(max_val) - 1 : item-- ;
+        refreshFlag = true;
       }
     }
     else {
@@ -252,123 +278,127 @@ void button_event() {
 
 
 void display_send() {
-  switch (MODE) {
-    case 1: {
-        if (not batFlag) {
-          seg_display.point(0, true);
+  if (refreshFlag) {
+    switch (MODE) {
+      case 1: {
+          if (not batFlag) {
+            seg_display.point(0, true);
+          }
+          else {
+            seg_display.point(0, false);
+          }
+          if (not sendFlag && not muteFlag) {
+            seg_display.brightness(bright);
+            if (transmitFlag) {
+              seg_display.twistByte(0, 0x70, 15);
+              transmitFlag = false;
+            }
+            if (auto_send) {
+              seg_display.displayPreset(_A, PRESET + 1);
+            }
+            else {
+              seg_display.displayPreset(0x70, PRESET + 1);
+            }
+            refreshFlag = false;
+          }
+          else {
+            if (sendFlag && not muteFlag) {
+              static byte temp_bright;
+              static bool blinkFlag = true;
+              temp_bright = bright ? 0 : -1;
+              timer_flag(blinkFlag, blink_delay);
+              blinkFlag ? seg_display.brightness(bright)
+              : seg_display.brightness(temp_bright);
+              seg_display.displayInt(PRESET + 1);
+            }
+            if (muteFlag) {
+              seg_display.displayByte(0x33, 0x27, _u, _t);
+              refreshFlag = false;
+            }
+          }
+
+          break;
         }
-        else {
-          seg_display.point(0, false);
-        }
-        if (not sendFlag && not muteFlag) {
+
+      case 2: {
+          static byte to_display[4] = {0};
           seg_display.brightness(bright);
-          if (transmitFlag) {
-            seg_display.twistByte(0, 0x70, 15);
-            transmitFlag = false;
+          if (not batFlag) {
+            seg_display.point(0, true);
           }
-          if(auto_send){
-            seg_display.displayByte(0 , _A);
+          else {
+            seg_display.point(0, false);
+          }
+          if (not switch_mode) {
+            if (sw1_Flag) {
+              to_display[0] = 0x5c;
             }
-          else {
-            seg_display.displayByte(0 , 0x70);
+            else {
+              to_display[0] = 0x08;
             }
-          seg_display.display(1, (PRESET + 1) / 100 ? 1 : 10);
-          seg_display.display(2, PRESET + 1 < 10 ? 10 : ((PRESET + 1) % 100) / 10);
-          seg_display.display(3, ((PRESET + 1) % 100) % 10);
-        }
-        else {
-          if (sendFlag && not muteFlag) {
-            static byte temp_bright;
-            static bool blinkFlag = true;
-            temp_bright = bright ? 0 : -1;
-            timer_flag(blinkFlag, blink_delay);
-            blinkFlag ? seg_display.brightness(bright)
-            : seg_display.brightness(temp_bright);
-            seg_display.displayInt(PRESET + 1);
+            if (sw2_Flag) {
+              to_display[3] = 0x5c;
+            }
+            else {
+              to_display[3] = 0x08;
+            }
+            seg_display.displayByte(to_display);
           }
-          if (muteFlag) {
-            seg_display.displayByte(0x33, 0x27, _u, _t);
+          else {
+            if (p1_programm == PRESET + 1) {
+              seg_display.displayByte(0, _P, _1, 0);
+            }
+            else if (p2_programm == PRESET + 1) {
+              seg_display.displayByte(0, _P, _2, 0);
+            }
+            else {
+              seg_display.displayByte(0, _P, _C, 0);
+            }
+
           }
+          refreshFlag = false;
+          break;
         }
 
-        break;
-      }
-
-    case 2: {
-        static byte to_display[4] = {0};
-        seg_display.brightness(bright);
-        if (not batFlag) {
-          seg_display.point(0, true);
-        }
-        else {
-          seg_display.point(0, false);
-        }
-        if(not switch_mode) {
-          if (sw1_Flag) {
-            to_display[0] = 0x5c;
+      case 3: {
+          seg_display.brightness(bright);
+          if (shutFlag) {
+            seg_display.displayByte(_O, _f, _f, 0);
+          }
+          else if (voltFlag) {
+            seg_display.displayFloat(voltage);
+            timer_flag(voltFlag, 2000);
           }
           else {
-            to_display[0] = 0x08;
-          }
-          if (sw2_Flag) {
-            to_display[3] = 0x5c;
-          }
-          else {
-            to_display[3] = 0x08;
-          } 
-          seg_display.displayByte(to_display); 
-        }
-        else {
-          if(p1_programm == PRESET+1) {
-            seg_display.displayByte(0, _P, _1, 0);
-          }
-          else if(p2_programm == PRESET+1) {
-            seg_display.displayByte(0, _P, _2, 0);
-          }
-          else {
-            seg_display.displayByte(0, _P, _C, 0);
-          } 
-           
-        }
-        break;
-      }
-
-    case 3: {
-        seg_display.brightness(bright);
-        if(shutFlag){
-          seg_display.displayByte(_O, _f, _f, 0);
-          }
-        else if (voltFlag) {
-          seg_display.displayFloat(voltage);
-          timer_flag(voltFlag, 2000);
-        }
-        else {
-          if (not editFlag) {
-            seg_display.displayByte(settings_names[item]);
-          }
-          else {
-            if(item == 6){
-              (*settings[item]) ?
-              seg_display.displayByte(0, 0, _O, _n) :
-              seg_display.displayByte(0, _O, _f, _f);
+            if (not editFlag) {
+              seg_display.displayByte(settings_names[item]);
+            }
+            else {
+              if (item == 6) {
+                (*settings[item]) ?
+                seg_display.displayByte(0, 0, _O, _n) :
+                seg_display.displayByte(0, _O, _f, _f);
               }
-            else if(item == 7){
-              (*settings[item]) ?
-              seg_display.displayByte(0, 0, _P, _C) :
-              seg_display.displayByte(0, 0, _C, _C);
-              }  
-            else {  
-              seg_display.displayInt(*settings[item]);
+              else if (item == 7) {
+                (*settings[item]) ?
+                seg_display.displayByte(0, 0, _P, _C) :
+                seg_display.displayByte(0, 0, _C, _C);
+              }
+              else {
+                seg_display.displayInt(*settings[item]);
+              }
             }
+            refreshFlag = false;
           }
+          break;
         }
-        break;
-      }
-    default: {
-        seg_display.displayByte(_E, _r, _r, 0);
-        break;
-      }
+      default: {
+          seg_display.displayByte(_E, _r, _r, 0);
+          break;
+        }
+    }
   }
+
 }
 
 
@@ -395,14 +425,17 @@ bool timer_flag(bool &flag, const int &t_delay) {
 void setting(byte** setting, byte* max_val) {
   if (Set.isSingle()) {
     editFlag = false;
+    refreshFlag =true;
   }
   if (Up.isClick()) {
     *setting[item] == max_val[item] ? *settings[item] = 0 :
         *setting[item] = *setting[item] + 1;
+        refreshFlag =true;
   }
   if (Down.isClick()) {
     *setting[item] == 0 ? *settings[item] = max_val[item] :
                                             *setting[item] = *setting[item] - 1;
+                                            refreshFlag =true;
   }
 
 
@@ -427,4 +460,5 @@ void save_bat() {
     batFlag = true;
     EEPROM.get(2, bright);
   }
+  refreshFlag =true;
 }

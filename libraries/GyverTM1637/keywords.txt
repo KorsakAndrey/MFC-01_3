@@ -17,6 +17,7 @@ display	KEYWORD2
 displayByte	KEYWORD2
 displayInt	KEYWORD2
 displayFloat	KEYWORD2
+displayPreset	KEYWORD2
 
 displayClock	KEYWORD2
 displayClockTwist	KEYWORD2
@@ -32,6 +33,7 @@ clear		KEYWORD2
 point		KEYWORD2
 brightness	KEYWORD2
 digToHEX	KEYWORD2
+intro		KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

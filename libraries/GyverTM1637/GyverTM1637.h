@@ -27,6 +27,8 @@ public:
 
 	GyverTM1637(uint8_t clk, uint8_t dio);									// объявление и инициализация
 
+	void intro(byte time);															// интро
+
 	void display(uint8_t DispData[]);										// выводит цифры массивом по ячейкам. От 0 до 9 (byte values[] = {3, 5, 9, 0}; )
 	void display(uint8_t BitAddr, uint8_t DispData);							// выводит цифру DispData в указанную ячейку дисплея BitAddr
 	void display(uint8_t bit0, uint8_t bit1, uint8_t bit2, uint8_t bit3);	// если лень создавать массив, выводит цифры в ячейки
@@ -41,6 +43,8 @@ public:
 
 	void displayInt(int value);                                             // выводит число от -999 до 9999 (да, со знаком минус)
 	void displayFloat(float value);											// выводит число с точкой
+
+	void displayPreset(int sign, int value);											// выводит трёхзначное число
 
 	void runningString(uint8_t DispData[], byte amount, int delayMs);  		// бегущая строка (array, sizeof(array), задержка в мс)
 

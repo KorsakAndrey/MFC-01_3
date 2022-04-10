@@ -313,6 +313,32 @@ void GyverTM1637::displayFloat(float value){
 	GyverTM1637::displayByte(digits);
 }
 
+void GyverTM1637::displayPreset(int sign, int value) {
+	if (value > 999 || value < 0) return;
+	byte digits[4];
+
+	digits[0] = sign;
+	digits[1] =  (int)value / 100; 	// получем количество сотен
+	uint16_t b = digits[1] * 100;               	// суммируем сотни и тысячи
+	digits[2] = (int)(value - b) / 10;  	// получем десятки
+	b += digits[2] * 10;                	// сумма тысяч, сотен и десятков
+	digits[3] = value - b;              	// получаем количество единиц
+
+
+	for (byte i = 1; i < 3; i++) {
+		if(digits[i] == 0) {
+			digits[i] = 10;
+		}else 
+			break;
+	}
+	
+	for (byte i = 1; i <= 3; i++) {
+		digits[i] = digToHEX(digits[i]);
+	}
+	
+	GyverTM1637::displayByte(digits);
+}
+
 void GyverTM1637::runningString(uint8_t DispData[], byte amount, int delayMs) {
 	uint8_t segm_data[amount + 8];    // оставляем место для 4х пустых слотов в начале и в конце
 	for (byte i = 0; i < 4; i++) {  // делаем первые 4 символа пустыми
@@ -591,4 +617,35 @@ void GyverTM1637::twistByte(uint8_t BitAddr, uint8_t DispData, int delayms) {
 		delay(delayms);
 	}
 	displayByte(BitAddr, newByte);
+}
+
+void GyverTM1637::intro(byte time){
+	byte bytes[]= {0, 0, 0, 0};
+	byte st0 = 0x00;
+	byte st1 = 0x20;
+	byte st2 = 0x32;
+	byte st3 = 0x16;
+	byte st4 = 0x04;
+	
+	
+	for(int i = 0; i < 7; i++) {
+		for(int j = 0; j < 4 ; j++){
+			bytes[j] = st0;
+		}
+		
+		if(i-3 < 4 && i-3 >= 0)
+			bytes[i-3] = st4;
+		if(i-2 < 4 && i-2 >= 0)
+			bytes[i-2] = st3;
+		if(i-1 < 4 && i-1 >= 0)
+			bytes[i-1] = st2;
+		if(i < 4 && i >= 0)
+			bytes[i] = st1;	
+		
+		
+		displayByte(bytes);
+		delay(time);
+	}	
+		
+	
 }
