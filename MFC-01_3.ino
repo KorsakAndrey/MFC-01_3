@@ -1,19 +1,19 @@
 //#pragma GCC optimize ("-O")
 
+//I/O
 #define UP_PIN 6
 #define DOWN_PIN 5
 #define SET_PIN 4
 #define CLK 3
 #define DIO 2
+//Power
 #define IS_ON 7
 #define VREF 1.1
-/*((DIV_R1 + DIV_R2) / DIV_R2) = 4.6
-  DIV_R1 9750  betwen "+" and POWER_SENS
-  DIV_R2 2700  betwen "-" and POWER_SENS
-*/
-#define POWER_COEFF 4.6
+#define  DIV_R1 9750  //betwen "+" and POWER_SENS
+#define  DIV_R2 2700  //betwen "-" and POWER_SENS
 #define POWER_SENS A3
 #define LOW_BAT 3.60  //V
+//Const
 #define ON 127
 #define OFF 0
 #define blink_delay 500  //ms
@@ -31,7 +31,7 @@ byte MODE = 1; //Global work mode
 byte PRESET = 0; //Preset number
 bool is_on = true; //Device Status
 float voltage; //Onboard voltage
-byte wievCounter = 255;
+constexpr float VoltCoeff = ((float)(DIV_R1 + DIV_R2) / DIV_R2) * VREF / 1024;
 
 //Flags
 bool sendFlag = false; //For send programms
@@ -109,7 +109,7 @@ void setup() {
   Serial.begin(31250); //Serial 9600 ,MIDI 31250
   seg_display.clear();
   seg_display.brightness(bright);
-  
+
 
 
   //Buttons config
@@ -131,9 +131,8 @@ void button_event(); //processing click of buttons
 void display_send(); //send data to display
 bool timer_flag(bool &flag, const int &t_delay); //invert flag by timer
 void setting(byte** setting, byte* max_val); //change devices settings
-void bat_stat(float &voltage); //check battery
+void bat_stat(); //check battery
 void save_bat();
-
 
 void loop() {
   Up.tick();
@@ -425,17 +424,17 @@ bool timer_flag(bool &flag, const int &t_delay) {
 void setting(byte** setting, byte* max_val) {
   if (Set.isSingle()) {
     editFlag = false;
-    refreshFlag =true;
+    refreshFlag = true;
   }
   if (Up.isClick()) {
     *setting[item] == max_val[item] ? *settings[item] = 0 :
         *setting[item] = *setting[item] + 1;
-        refreshFlag =true;
+    refreshFlag = true;
   }
   if (Down.isClick()) {
     *setting[item] == 0 ? *settings[item] = max_val[item] :
                                             *setting[item] = *setting[item] - 1;
-                                            refreshFlag =true;
+    refreshFlag = true;
   }
 
 
@@ -443,15 +442,14 @@ void setting(byte** setting, byte* max_val) {
 }
 
 
-void bat_stat(float &voltage) {
-  double temp = (double)analogRead(POWER_SENS) * VREF * POWER_COEFF / 1024;
-  voltage = (float)temp;
+void bat_stat() {
+  voltage = (float)analogRead(POWER_SENS) * VoltCoeff;
 }
 
 
 
 void save_bat() {
-  bat_stat(voltage);
+  bat_stat();
   if (voltage < LOW_BAT) {
     batFlag = false;
     bright = 0;
@@ -460,5 +458,5 @@ void save_bat() {
     batFlag = true;
     EEPROM.get(2, bright);
   }
-  refreshFlag =true;
+  refreshFlag = true;
 }
