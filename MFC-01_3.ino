@@ -1,5 +1,8 @@
 //#pragma GCC optimize ("-O")
 
+//TODO Save names  in PROGMEM and read with readFlash function
+//     Fix bug with autosend in manual mode
+
 //I/O
 #define UP_PIN 6
 #define DOWN_PIN 5
@@ -40,9 +43,9 @@ bool sw1_Flag = false;
 bool sw2_Flag = false;
 bool muteFlag = false;
 bool editFlag = false;
-bool voltFlag = false;
-bool batFlag = true;
-bool shutFlag = false;
+bool voltFlag = false; //Show bort voltage
+bool batFlag = true;  //Battery is OK
+bool shutFlag = false; //Shutoff device
 bool refreshFlag = true;
 
 
@@ -60,19 +63,8 @@ struct {
   byte preset_2;
 } memory;
 
-byte channel; //Channel
-byte bright; //Bright
-byte max_preset; //max value preset
-byte sw1_command;
-byte sw2_command;
-byte mute_command;
-byte auto_send;
-byte switch_mode;
-byte p1_programm;
-byte p2_programm;
-
 //Settings
-byte settings_names[][4] = {
+const byte settings_names[][4] = {
   {0, _C, _h, 0}, {0, _B, _r, 0},
   {_S, _h, _f, _t}, {_A, _u, _t, _o},
   {0x33, 0x27, _o, _d},
@@ -80,9 +72,10 @@ byte settings_names[][4] = {
   {0x33, 0x27, _u, _t},
   {0, _P, _1, 0}, {0, _P, _2, 0}
 };
-
-byte max_val[] = {16, 7, 127, 1, 1, 127, 127, 127, 127, 127};
-byte item = 0;
+const byte condition[][4] = {{0, _O, _f, _f}, {0, 0, _O, _n}};
+const byte change[][4] = {{0, 0, _P, _C}, {0, 0, _C, _C}};
+const byte max_val[] = {16, 7, 127, 1, 1, 127, 127, 127, 127, 127};
+byte item = 0; //Settings menu item
 
 
 //Display initialization
@@ -113,20 +106,10 @@ void setup() {
   analogReference(INTERNAL);
 
   //Read values from eeprom
-  EEPROM.get(1, channel);
-  EEPROM.get(2, bright);
-  EEPROM.get(3, max_preset);
-  EEPROM.get(4, auto_send);
-  EEPROM.get(5, switch_mode);
-  EEPROM.get(6, sw1_command);
-  EEPROM.get(7, sw2_command);
-  EEPROM.get(8, mute_command);
-  EEPROM.get(9, p1_programm);
-  EEPROM.get(10, p2_programm);
   readMemory();
 
   //Configuration protocoll and display
-  MIDI.begin(channel); //MIDI
+  MIDI.begin(memory.channel); //MIDI
   Serial.begin(31250); //Serial 9600 ,MIDI 31250
   seg_display.clear();
   seg_display.brightness(memory.bright);
@@ -153,9 +136,9 @@ void loop() {
   Set.tick();
 
   button_event();
-  /*if (not voltFlag) {
+  if (refreshFlag && not voltFlag) {
     save_bat();
-    }*/
+  }
 
   display_send();
 
@@ -178,7 +161,7 @@ void button_event() {
         refreshFlag = true;
       }
       if (sendFlag && (memory.autoSend || Set.isSingle())) {
-        MIDI.sendProgramChange(PRESET, channel);
+        MIDI.sendProgramChange(PRESET, memory.channel);
         sendFlag = false;
         transmitFlag = !memory.autoSend;
         refreshFlag = true;
@@ -221,12 +204,12 @@ void button_event() {
     else {
       if (Down.isClick()) {
         PRESET = memory.preset_1;
-        MIDI.sendProgramChange(PRESET, channel);
+        MIDI.sendProgramChange(PRESET, memory.channel);
         refreshFlag = true;
       }
       if (Up.isClick()) {
         PRESET = memory.preset_2;
-        MIDI.sendProgramChange(PRESET, channel);
+        MIDI.sendProgramChange(PRESET, memory.channel);
         refreshFlag = true;
       }
     }
@@ -241,9 +224,9 @@ void button_event() {
     //Check battery
     if (voltFlag) {
       if (shutFlag) {
-        timer_flag(powerOn, 1000);
+        timer_flag(powerOn, 1000); //1
       } else {
-        timer_flag(voltFlag, 2000);
+        timer_flag(voltFlag, 2000); //2
       }
       if (!powerOn) {
         digitalWrite(POWER, powerOn);
@@ -314,17 +297,16 @@ void display_send() {
               static byte temp_bright;
               static bool blinkFlag = true;
               temp_bright = memory.bright ? 0 : -1;
-              timer_flag(blinkFlag, blink_delay);
+              timer_flag(blinkFlag, blink_delay); //3
               blinkFlag ? seg_display.brightness(memory.bright)
               : seg_display.brightness(temp_bright);
-              seg_display.displayInt(PRESET + 1);
+              seg_display.displayInt(PRESET + memory.shiftPreset);
             }
             if (muteFlag) {
               seg_display.displayByte(0x33, 0x27, _u, _t);
               refreshFlag = false;
             }
           }
-
           break;
         }
 
@@ -362,7 +344,6 @@ void display_send() {
             else {
               seg_display.displayByte(0, _P, _C, 0);
             }
-
           }
           refreshFlag = false;
           break;
@@ -382,14 +363,16 @@ void display_send() {
             }
             else {
               if (item == 3) {
-                (*((bool*)&memory + item)) ?
-                seg_display.displayByte(0, 0, _O, _n) :
-                seg_display.displayByte(0, _O, _f, _f);
+                seg_display.displayByte(condition[*((bool*)&memory + item)]);
+                /*(*((bool*)&memory + item)) ?
+                  seg_display.displayByte(0, 0, _O, _n) :
+                  seg_display.displayByte(0, _O, _f, _f);*/
               }
               else if (item == 4) {
-                (*((bool*)&memory + item)) ?
-                seg_display.displayByte(0, 0, _P, _C) :
-                seg_display.displayByte(0, 0, _C, _C);
+                seg_display.displayByte(change[*((bool*)&memory + item)]);
+                /*(*((bool*)&memory + item)) ?
+                  seg_display.displayByte(0, 0, _C, _C) :
+                  seg_display.displayByte(0, 0, _P, _C);*/
               }
               else {
                 seg_display.displayInt(*((byte*)&memory + item));
@@ -459,16 +442,24 @@ void bat_stat() {
   voltage = (float)analogRead(POWER_SENS) * VoltCoeff;
 }
 
-//TODO delete doubles
+
 void save_bat() {
   bat_stat();
   if (voltage < LOW_BAT) {
     batFlag = false;
     memory.bright = 0;
   }
-  if (voltage > LOW_BAT + 0.1) {
+  if (!batFlag && (voltage > LOW_BAT + 0.1)) {
     batFlag = true;
     EEPROM.get((byte)&memory.bright - (byte)&memory + SHIFT_MEMORY, memory.bright);
   }
   refreshFlag = true;
 }
+/*
+byte readFlash(const byte& arr) {
+  byte temp[4];
+  for (byte i = 0 ; i < 4 ; i++) {
+    temp[i] = (byte)pgm_read_byte(&arr + i);
+  }
+  return temp;
+}*/
