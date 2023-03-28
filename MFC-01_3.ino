@@ -1,6 +1,5 @@
 //#pragma GCC optimize ("-O")
 
-//TODO Save names  in PROGMEM and read with readFlash function
 
 //I/O
 #define UP_PIN 6
@@ -63,7 +62,7 @@ struct {
 } memory;
 
 //Settings
-const byte settings_names[][4] = {
+const byte settings_names[][4] PROGMEM = {
   {0, _C, _h, 0}, {0, _B, _r, 0},
   {_S, _h, _f, _t}, {_A, _u, _t, _o},
   {0x33, 0x27, _o, _d},
@@ -71,11 +70,13 @@ const byte settings_names[][4] = {
   {0x33, 0x27, _u, _t},
   {0, _P, _1, 0}, {0, _P, _2, 0}
 };
-const byte condition[][4] = {
+const byte condition[][4] PROGMEM = {
   {0, _O, _f, _f}, {0, 0, _O, _n}
 };
-const byte change[][4] = {
-  {0, 0, _P, _C}, {0, 0, _C, _C}
+const byte change[][4] PROGMEM = {
+  {0, 0, _P, _C}, {0, 0, _C, _C},
+  {0, _P, _1, 0}, {0, _P, _2, 0},
+  {0, _P, _C, 0}
 };
 const byte max_val[] = {16, 7, 127, 1, 1, 127, 127, 127, 127, 127};
 byte item = 0; //Settings menu item
@@ -98,6 +99,7 @@ void readMemory();
 void writeMemory();
 void bat_stat(); //check battery
 void save_bat();
+void readFlash(const byte &pointer, byte* arr);
 
 
 void setup() {
@@ -306,7 +308,9 @@ void display_send() {
               seg_display.displayInt(PRESET + memory.shiftPreset);
             }
             if (muteFlag) {
-              seg_display.displayByte(0x33, 0x27, _u, _t);
+              byte temp[4];
+              readFlash(settings_names[7], temp); //Mut
+              seg_display.displayByte(temp);
               refreshFlag = false;
             }
           }
@@ -338,14 +342,18 @@ void display_send() {
             seg_display.displayByte(to_display);
           }
           else {
+            byte temp[4];
             if (memory.preset_1 == PRESET) {
-              seg_display.displayByte(0, _P, _1, 0);
+              readFlash(change[2], temp); //P1
+              seg_display.displayByte(temp); 
             }
             else if (memory.preset_2 == PRESET) {
-              seg_display.displayByte(0, _P, _2, 0);
+              readFlash(change[3], temp); //P2
+              seg_display.displayByte(temp);
             }
             else {
-              seg_display.displayByte(0, _P, _C, 0);
+              readFlash(change[4], temp); //PC
+              seg_display.displayByte(temp);
             }
           }
           refreshFlag = false;
@@ -361,21 +369,19 @@ void display_send() {
             seg_display.displayFloat(voltage);
           }
           else {
+            byte temp[4];
             if (not editFlag) {
-              seg_display.displayByte(settings_names[item]);
+              readFlash(settings_names[item], temp);
+              seg_display.displayByte(temp);
             }
             else {
               if (item == 3) {
-                seg_display.displayByte(condition[*((bool*)&memory + item)]);
-                /*(*((bool*)&memory + item)) ?
-                  seg_display.displayByte(0, 0, _O, _n) :
-                  seg_display.displayByte(0, _O, _f, _f);*/
+                readFlash(condition[*((bool*)&memory + item)], temp);
+                seg_display.displayByte(temp);
               }
               else if (item == 4) {
-                seg_display.displayByte(change[*((bool*)&memory + item)]);
-                /*(*((bool*)&memory + item)) ?
-                  seg_display.displayByte(0, 0, _C, _C) :
-                  seg_display.displayByte(0, 0, _P, _C);*/
+                readFlash(change[*((bool*)&memory + item)], temp);
+                seg_display.displayByte(temp);
               }
               else {
                 seg_display.displayInt(*((byte*)&memory + item));
@@ -458,11 +464,9 @@ void save_bat() {
   }
   refreshFlag = true;
 }
-/*
-  byte readFlash(const byte& arr) {
-  byte temp[4];
+
+void readFlash(const byte &pointer, byte* arr) {
   for (byte i = 0 ; i < 4 ; i++) {
-    temp[i] = (byte)pgm_read_byte(&arr + i);
+    arr[i] = (byte)pgm_read_byte(pointer + i);
   }
-  return temp;
-  }*/
+}
