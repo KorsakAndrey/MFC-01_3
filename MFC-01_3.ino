@@ -1,7 +1,6 @@
 //#pragma GCC optimize ("-O")
 
 //TODO Save names  in PROGMEM and read with readFlash function
-//     Fix bug with autosend in manual mode
 
 //I/O
 #define UP_PIN 6
@@ -72,8 +71,12 @@ const byte settings_names[][4] = {
   {0x33, 0x27, _u, _t},
   {0, _P, _1, 0}, {0, _P, _2, 0}
 };
-const byte condition[][4] = {{0, _O, _f, _f}, {0, 0, _O, _n}};
-const byte change[][4] = {{0, 0, _P, _C}, {0, 0, _C, _C}};
+const byte condition[][4] = {
+  {0, _O, _f, _f}, {0, 0, _O, _n}
+};
+const byte change[][4] = {
+  {0, 0, _P, _C}, {0, 0, _C, _C}
+};
 const byte max_val[] = {16, 7, 127, 1, 1, 127, 127, 127, 127, 127};
 byte item = 0; //Settings menu item
 
@@ -160,7 +163,7 @@ void button_event() {
         sendFlag = true;
         refreshFlag = true;
       }
-      if (sendFlag && (memory.autoSend || Set.isSingle())) {
+      if ((Set.isSingle() || memory.autoSend) && sendFlag) {
         MIDI.sendProgramChange(PRESET, memory.channel);
         sendFlag = false;
         transmitFlag = !memory.autoSend;
@@ -456,10 +459,10 @@ void save_bat() {
   refreshFlag = true;
 }
 /*
-byte readFlash(const byte& arr) {
+  byte readFlash(const byte& arr) {
   byte temp[4];
   for (byte i = 0 ; i < 4 ; i++) {
     temp[i] = (byte)pgm_read_byte(&arr + i);
   }
   return temp;
-}*/
+  }*/
