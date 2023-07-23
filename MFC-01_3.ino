@@ -1,6 +1,5 @@
 //#pragma GCC optimize ("-O")
 
-
 //I/O
 #define UP_PIN 6
 #define DOWN_PIN 5
@@ -9,7 +8,7 @@
 #define DIO 2
 //POWER
 #define POWER 7
-#define VREF 1.1
+#define VREF 1.1     //V
 #define DIV_R1 9750  //betwen "+" and POWER_SENS
 #define DIV_R2 2700  //betwen "-" and POWER_SENS
 #define POWER_SENS A3
@@ -26,7 +25,7 @@
 #include <MIDI.h>
 
 MIDI_CREATE_DEFAULT_INSTANCE();
-constexpr float VoltCoeff = ((float)(DIV_R1 + DIV_R2) / DIV_R2) * VREF / 1024;
+constexpr float VoltFactor = ((float)(DIV_R1 + DIV_R2) / DIV_R2) * VREF / 1024;
 
 //Global var
 byte MODE = 1; //Global work mode
@@ -53,12 +52,14 @@ struct {
   byte bright;
   byte shiftPreset;
   bool autoSend;
-  bool switchMode;
+  byte switchMode;
   byte command_1;
   byte command_2;
   byte command_mute;
   byte preset_1;
   byte preset_2;
+  byte tip;
+  byte ring;
 } memory;
 
 //Settings
@@ -68,17 +69,18 @@ const byte settings_names[][4] PROGMEM = {
   {0x33, 0x27, _o, _d},
   {0, _S, _1, 0}, {0, _S, _2, 0},
   {0x33, 0x27, _u, _t},
-  {0, _P, _1, 0}, {0, _P, _2, 0}
+  {0, _P, _1, 0}, {0, _P, _2, 0},
+  {0, _t, _i, _P}, {0, _r, _i, _n}
 };
 const byte condition[][4] PROGMEM = {
   {0, _O, _f, _f}, {0, 0, _O, _n}
 };
 const byte change[][4] PROGMEM = {
   {0, 0, _P, _C}, {0, 0, _C, _C},
-  {0, _P, _1, 0}, {0, _P, _2, 0},
-  {0, _P, _C, 0}
+  {_S, 0, _C, _H}, {0, _P, _1, 0},
+  {0, _P, _2, 0}, {0, _P, _C, 0}
 };
-const byte max_val[] = {16, 7, 127, 1, 1, 127, 127, 127, 127, 127};
+const byte max_val[] = {16, 7, 127, 1, 2, 127, 127, 127, 127, 127, 127, 127};
 byte item = 0; //Settings menu item
 
 
@@ -91,9 +93,9 @@ GButton Up(UP_PIN);
 GButton Down(DOWN_PIN);
 GButton Set(SET_PIN);
 
-void button_event(); //processing click of buttons
+void button_event(); //processing press of buttons
 void display_send(); //send data to display
-bool timer_flag(bool &flag, const int &t_delay); //invert flag by timer
+void timer_flag(bool &flag, const int &t_delay); //invert flag by timer
 void setting(byte* max_val); //change devices settings
 void readMemory();
 void writeMemory();
@@ -144,131 +146,163 @@ void loop() {
   if (refreshFlag && not voltFlag) {
     save_bat();
   }
-
   display_send();
-
-
 }
-
 
 void button_event() {
   //Change preset
-  if ( MODE == 1) {
-    if (not muteFlag) {
-      if (Up.isClick() || Up.isStep()) {
-        (PRESET < 127) ? PRESET++ : PRESET = 0;
-        sendFlag = true;
-        refreshFlag = true;
-      }
-      if (Down.isClick() || Down.isStep()) {
-        (PRESET > 0) ? PRESET-- : PRESET = 127;
-        sendFlag = true;
-        refreshFlag = true;
-      }
-      if ((Set.isSingle() || memory.autoSend) && sendFlag) {
-        MIDI.sendProgramChange(PRESET, memory.channel);
-        sendFlag = false;
-        transmitFlag = !memory.autoSend;
-        refreshFlag = true;
-      }
-      if (Set.isDouble()) {
-        MODE = 2;
-        refreshFlag = true;
-      }
-      if (Set.isTriple()) {
-        MODE = 3;
-        voltFlag = true;
-        refreshFlag = true;
-      }
-    }
-    if (Set.isHolded()) {
-      muteFlag = !muteFlag;
-      if (muteFlag) {
-        MIDI.sendControlChange(memory.command_mute, ON, memory.channel);
-      }
-      else {
-        MIDI.sendControlChange(memory.command_mute, OFF, memory.channel);
-      }
-      refreshFlag = true;
-    }
-  }
-  //Send control command
-  if (MODE == 2) {
-    if (memory.switchMode) {
-      if (Up.isClick()) {
-        sw2_Flag = !sw2_Flag;
-        MIDI.sendControlChange(memory.command_2, sw2_Flag ? ON : OFF, memory.channel);
-        refreshFlag = true;
-      }
-      if (Down.isClick()) {
-        sw1_Flag = !sw1_Flag;
-        MIDI.sendControlChange(memory.command_1, sw1_Flag ? ON : OFF, memory.channel);
-        refreshFlag = true;
-      }
-    }
-    else {
-      if (Down.isClick()) {
-        PRESET = memory.preset_1;
-        MIDI.sendProgramChange(PRESET, memory.channel);
-        refreshFlag = true;
-      }
-      if (Up.isClick()) {
-        PRESET = memory.preset_2;
-        MIDI.sendProgramChange(PRESET, memory.channel);
-        refreshFlag = true;
-      }
-    }
-    if (Set.isDouble()) {
-      MODE = 1;
-      Set.resetStates();
-      refreshFlag = true;
-    }
-  }
-  //Shutdown
-  if (MODE == 3) {
-    //Check battery
-    if (voltFlag) {
-      if (shutFlag) {
-        timer_flag(powerOn, 1000); //1
-      } else {
-        timer_flag(voltFlag, 2000); //2
-      }
-      if (!powerOn) {
-        digitalWrite(POWER, powerOn);
-      }
-      if (Up.isClick() && Down.isClick()) {
-        shutFlag = true;
-        refreshFlag = true;
-      }
-    }
-    //Settings
-    if (not voltFlag) {
-      if (Set.isTriple()) {
-        MODE = 1;
-        editFlag = false;
-        refreshFlag = true;
-        item = 0;
-        Set.resetStates();
-        return;
-      }
-      if (not editFlag) {
-        if (Set.isSingle()) {
-          editFlag = true;
-          refreshFlag = true;
+  switch (MODE) {
+    case 1: {
+        {
+          if (not muteFlag) {
+            if (Up.isClick() || Up.isStep()) {
+              (PRESET < 127) ? PRESET++ : PRESET = 0;
+              sendFlag = true;
+              refreshFlag = true;
+            }
+            if (Down.isClick() || Down.isStep()) {
+              (PRESET > 0) ? PRESET-- : PRESET = 127;
+              sendFlag = true;
+              refreshFlag = true;
+            }
+            if ((Set.isSingle() || memory.autoSend) && sendFlag) {
+              MIDI.sendProgramChange(PRESET, memory.channel);
+              sendFlag = false;
+              transmitFlag = !memory.autoSend;
+              refreshFlag = true;
+            }
+            if (Set.isDouble()) {
+              MODE = 2;
+              refreshFlag = true;
+            }
+            if (Set.isTriple()) {
+              MODE = 3;
+              voltFlag = true;
+              refreshFlag = true;
+            }
+          }
+          if (Set.isHolded()) {
+            muteFlag = !muteFlag;
+            if (muteFlag) {
+              MIDI.sendControlChange(memory.command_mute, ON, memory.channel);
+            }
+            else {
+              MIDI.sendControlChange(memory.command_mute, OFF, memory.channel);
+            }
+            refreshFlag = true;
+          }
         }
-        if (Up.isClick()) {
-          item == sizeof(max_val) - 1 ? item = 0 : item++;
-          refreshFlag = true;
-        }
-        if (Down.isClick()) {
-          item == 0 ? item = sizeof(max_val) - 1 : item-- ;
-          refreshFlag = true;
-        }
+        break;
       }
-      else {
-        setting(max_val);
+    case 2: {   //Send control command
+        {
+          switch (memory.switchMode) {
+            case 0: {
+                if (Down.isClick()) {
+                  PRESET = memory.preset_1;
+                  MIDI.sendProgramChange(PRESET, memory.channel);
+                  refreshFlag = true;
+                }
+                if (Up.isClick()) {
+                  PRESET = memory.preset_2;
+                  MIDI.sendProgramChange(PRESET, memory.channel);
+                  refreshFlag = true;
+                }
+                break;
+              }
+            case 1: {
+                if (Up.isClick()) {
+                  sw2_Flag = !sw2_Flag;
+                  MIDI.sendControlChange(memory.command_2, sw2_Flag ? ON : OFF, memory.channel);
+                  refreshFlag = true;
+                }
+                if (Down.isClick()) {
+                  sw1_Flag = !sw1_Flag;
+                  MIDI.sendControlChange(memory.command_1, sw1_Flag ? ON : OFF, memory.channel);
+                  refreshFlag = true;
+                }
+                break;
+              }
+            case 2: {
+                if (Up.isClick()) { //Green
+                  MIDI.sendControlChange(memory.tip, ON, memory.channel); //Tip
+                  MIDI.sendControlChange(memory.ring, ON, memory.channel); //Ring
+                  refreshFlag = true;
+                  transmitFlag = true;
+                }
+                if (Down.isClick()) { //Red
+                  MIDI.sendControlChange(memory.tip, OFF, memory.channel); //Tip
+                  MIDI.sendControlChange(memory.ring, OFF, memory.channel); //Ring
+                  refreshFlag = true;
+                  transmitFlag = true;
+                }
+                if (Set.isSingle()) { //Blue
+                  MIDI.sendControlChange(memory.tip, ON, memory.channel); //Tip
+                  MIDI.sendControlChange(memory.ring, OFF
+                  , memory.channel); //Ring
+                  refreshFlag = true;
+                  transmitFlag = true;
+                }
+                break;
+              }
+          }
+
+          if (Set.isDouble()) {
+            MODE = 1;
+            Set.resetStates();
+            refreshFlag = true;
+          }
+        }
+        break;
       }
-    }
+    case 3: {   //Shutdown
+        {
+          //Check battery
+          if (voltFlag) {
+            if (shutFlag) {
+              timer_flag(powerOn, 1000); //1
+            } else {
+              timer_flag(voltFlag, 2000); //2
+            }
+            if (!powerOn) {
+              digitalWrite(POWER, powerOn);
+            }
+            if (Up.isClick() && Down.isClick()) {
+              shutFlag = true;
+              refreshFlag = true;
+            }
+          }
+          //Settings
+          if (not voltFlag) {
+            if (Set.isTriple()) {
+              MODE = 1;
+              editFlag = false;
+              refreshFlag = true;
+              item = 0;
+              Set.resetStates();
+              return;
+            }
+            if (not editFlag) {
+              if (Set.isSingle()) {
+                editFlag = true;
+                refreshFlag = true;
+              }
+              if (Up.isClick()) {
+                item == sizeof(max_val) - 1 ? item = 0 : item++;
+                refreshFlag = true;
+              }
+              if (Down.isClick()) {
+                item == 0 ? item = sizeof(max_val) - 1 : item-- ;
+                refreshFlag = true;
+              }
+            }
+            else {
+              setting(max_val);
+            }
+          }
+        }
+        break;
+      }
   }
 }
 
@@ -326,35 +360,60 @@ void display_send() {
           else {
             seg_display.point(0, false);
           }
-          if (memory.switchMode) {
-            if (sw1_Flag) {
-              to_display[0] = 0x5c;
-            }
-            else {
-              to_display[0] = 0x08;
-            }
-            if (sw2_Flag) {
-              to_display[3] = 0x5c;
-            }
-            else {
-              to_display[3] = 0x08;
-            }
-            seg_display.displayByte(to_display);
-          }
-          else {
-            byte temp[4];
-            if (memory.preset_1 == PRESET) {
-              readFlash(change[2], temp); //P1
-              seg_display.displayByte(temp); 
-            }
-            else if (memory.preset_2 == PRESET) {
-              readFlash(change[3], temp); //P2
-              seg_display.displayByte(temp);
-            }
-            else {
-              readFlash(change[4], temp); //PC
-              seg_display.displayByte(temp);
-            }
+          switch (memory.switchMode) {
+            case 0: {
+                {
+                  byte temp[4];
+                  if (memory.preset_1 == PRESET) {
+                    readFlash(change[3], temp); //P1
+                    seg_display.displayByte(temp);
+                  }
+                  else if (memory.preset_2 == PRESET) {
+                    readFlash(change[4], temp); //P2
+                    seg_display.displayByte(temp);
+                  }
+                  else {
+                    readFlash(change[5], temp); //PC
+                    seg_display.displayByte(temp);
+                  }
+                }
+                break;
+              }
+            case 1: {
+                {
+                  if (sw1_Flag) {
+                    to_display[0] = 0x5c;
+                  }
+                  else {
+                    to_display[0] = 0x08;
+                  }
+                  if (sw2_Flag) {
+                    to_display[3] = 0x5c;
+                  }
+                  else {
+                    to_display[3] = 0x08;
+                  }
+                  seg_display.displayByte(to_display);
+                }
+                break;
+              }
+            case 2: {
+                {
+                  byte temp[4];
+                  readFlash(change[2], temp); //S CH
+                  if (transmitFlag) {
+                    seg_display.scrollByte(1, 0x08, 100);
+                    delay(100);
+                    seg_display.displayByte(1, 0x00);
+                    transmitFlag = false;
+                  }
+                  else {
+                    seg_display.displayByte(temp);
+                  }
+                }
+
+                break;
+              }
           }
           refreshFlag = false;
           break;
@@ -397,31 +456,28 @@ void display_send() {
         }
     }
   }
-
 }
 
 
-bool timer_flag(bool &flag, const int &t_delay) {
-  static bool reset = true;
+void timer_flag(bool & flag, const int &t_delay) {
   static bool condit;
   static bool* p;
-  static uint32_t timer;
+  static uint32_t timer = 0;
 
-  if (true == reset || p != &flag ) {
+  if (timer == 0 || p != &flag ) {
     timer = millis();
-    reset = false;
     p = &flag;
     condit = !flag;
+    return;
   }
   if (millis() - timer > t_delay) {
     flag = condit;
-    reset = true;
-    return true;
+    timer = 0;
   }
 }
 
 
-void setting(byte* max_val) {
+void setting(byte * max_val) {
   byte* pointer = (byte*)&memory + item;
   if (Set.isSingle()) {
     editFlag = false;
@@ -448,7 +504,7 @@ void writeMemory() {
 }
 
 void bat_stat() {
-  voltage = (float)analogRead(POWER_SENS) * VoltCoeff;
+  voltage = (float)analogRead(POWER_SENS) * VoltFactor;
 }
 
 
@@ -465,7 +521,7 @@ void save_bat() {
   refreshFlag = true;
 }
 
-void readFlash(const byte &pointer, byte* arr) {
+void readFlash(const byte & pointer, byte * arr) {
   for (byte i = 0 ; i < 4 ; i++) {
     arr[i] = (byte)pgm_read_byte(pointer + i);
   }
