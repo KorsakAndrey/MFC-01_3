@@ -31,7 +31,7 @@ constexpr float VoltFactor = ((float)(DIV_R1 + DIV_R2) / DIV_R2) * VREF / 1024;
 byte MODE = 1; //Global work mode
 byte PRESET = 0; //Preset number
 bool powerOn = true; //Device Status
-float voltage; //Onboard voltage
+float voltage = 4.0; //Onboard voltage
 
 //Flags
 bool sendFlag = false; //For send programms
@@ -101,7 +101,7 @@ void readMemory();
 void writeMemory();
 void bat_stat(); //check battery
 void save_bat();
-void readFlash(const byte &pointer, byte* arr);
+byte* readFlash(const byte & pointer);
 
 
 void setup() {
@@ -143,7 +143,7 @@ void loop() {
   Set.tick();
 
   button_event();
-  if (refreshFlag && not voltFlag) {
+  if (not refreshFlag && not voltFlag) {
     save_bat();
   }
   display_send();
@@ -239,7 +239,7 @@ void button_event() {
                 if (Set.isSingle()) { //Blue
                   MIDI.sendControlChange(memory.tip, ON, memory.channel); //Tip
                   MIDI.sendControlChange(memory.ring, OFF
-                  , memory.channel); //Ring
+                                         , memory.channel); //Ring
                   refreshFlag = true;
                   transmitFlag = true;
                 }
@@ -310,7 +310,7 @@ void button_event() {
 void display_send() {
   if (refreshFlag) {
     switch (MODE) {
-      case 1: {
+      case 1: { //PRESET
           if (not batFlag) {
             seg_display.point(0, true);
           }
@@ -342,16 +342,14 @@ void display_send() {
               seg_display.displayInt(PRESET + memory.shiftPreset);
             }
             if (muteFlag) {
-              byte temp[4];
-              readFlash(settings_names[7], temp); //Mut
-              seg_display.displayByte(temp);
+              seg_display.displayByte(readFlash(settings_names[7]));//Mut
               refreshFlag = false;
             }
           }
           break;
         }
 
-      case 2: {
+      case 2: {  //MODE
           static byte to_display[4] = {0};
           seg_display.brightness(memory.bright);
           if (not batFlag) {
@@ -363,18 +361,14 @@ void display_send() {
           switch (memory.switchMode) {
             case 0: {
                 {
-                  byte temp[4];
                   if (memory.preset_1 == PRESET) {
-                    readFlash(change[3], temp); //P1
-                    seg_display.displayByte(temp);
+                    seg_display.displayByte(readFlash(change[3]));//P1
                   }
                   else if (memory.preset_2 == PRESET) {
-                    readFlash(change[4], temp); //P2
-                    seg_display.displayByte(temp);
+                    seg_display.displayByte(readFlash(change[4]));//P2
                   }
                   else {
-                    readFlash(change[5], temp); //PC
-                    seg_display.displayByte(temp);
+                    seg_display.displayByte(readFlash(change[5]));//PC
                   }
                 }
                 break;
@@ -399,8 +393,6 @@ void display_send() {
               }
             case 2: {
                 {
-                  byte temp[4];
-                  readFlash(change[2], temp); //S CH
                   if (transmitFlag) {
                     seg_display.scrollByte(1, 0x08, 100);
                     delay(100);
@@ -408,7 +400,7 @@ void display_send() {
                     transmitFlag = false;
                   }
                   else {
-                    seg_display.displayByte(temp);
+                    seg_display.displayByte(readFlash(change[2]));//S CH
                   }
                 }
 
@@ -419,7 +411,7 @@ void display_send() {
           break;
         }
 
-      case 3: {
+      case 3: {  //SETTINGS
           seg_display.brightness(memory.bright);
           if (shutFlag) {
             seg_display.displayByte(_O, _f, _f, 0);
@@ -428,19 +420,15 @@ void display_send() {
             seg_display.displayFloat(voltage);
           }
           else {
-            byte temp[4];
             if (not editFlag) {
-              readFlash(settings_names[item], temp);
-              seg_display.displayByte(temp);
+              seg_display.displayByte(readFlash(settings_names[item])); //Names
             }
             else {
               if (item == 3) {
-                readFlash(condition[*((bool*)&memory + item)], temp);
-                seg_display.displayByte(temp);
+                seg_display.displayByte(readFlash(condition[*((bool*)&memory + item)]));
               }
               else if (item == 4) {
-                readFlash(change[*((bool*)&memory + item)], temp);
-                seg_display.displayByte(temp);
+                seg_display.displayByte(readFlash(change[*((bool*)&memory + item)]));
               }
               else {
                 seg_display.displayInt(*((byte*)&memory + item));
@@ -504,7 +492,11 @@ void writeMemory() {
 }
 
 void bat_stat() {
-  voltage = (float)analogRead(POWER_SENS) * VoltFactor;
+  static int currentTime = 0;
+  if (millis() - currentTime > 5000) {
+    voltage = (float)analogRead(POWER_SENS) * VoltFactor;
+    currentTime = millis();
+  }
 }
 
 
@@ -521,8 +513,10 @@ void save_bat() {
   refreshFlag = true;
 }
 
-void readFlash(const byte & pointer, byte * arr) {
+byte* readFlash(const byte& pointer) {
+  static byte temp[4];
   for (byte i = 0 ; i < 4 ; i++) {
-    arr[i] = (byte)pgm_read_byte(pointer + i);
+    temp[i] = (byte)pgm_read_byte(pointer + i);
   }
+  return temp;
 }
